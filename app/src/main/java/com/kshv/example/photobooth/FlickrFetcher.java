@@ -22,7 +22,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 class FlickrFetcher {
-    private static final String API_KEY = "f066ddd6bcf0f9329bcad7bdad634acb";
+    private static final String API_KEY = "";
     public static final String TAG = "FlickrFetcher";
 
     public List<FlickrItem> fetchData(int i) {
