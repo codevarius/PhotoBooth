@@ -1,19 +1,22 @@
 package com.kshv.example.photobooth;
 
-import androidx.appcompat.app.AppCompatActivity;
-
+import android.annotation.SuppressLint;
 import android.os.Bundle;
 
-public class MainActivity extends AppCompatActivity {
+import androidx.appcompat.app.AppCompatActivity;
 
+public class MainActivity extends AppCompatActivity {
+    @SuppressLint("StaticFieldLeak")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate (savedInstanceState);
-        setContentView (R.layout.activity_main);
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
 
-        getSupportFragmentManager ()
-                .beginTransaction ()
-                .add (R.id.fragment_container,new Fragmento ())
-                .commit ();
+        getSupportFragmentManager()
+                .beginTransaction()
+                .add(R.id.fragment_container, new Fragmento())
+                .commit();
+
+
     }
 }

@@ -7,89 +7,100 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Message;
 import android.util.Log;
+import android.util.LruCache;
 
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class ThumbnailDownloader<T> extends HandlerThread {
-    public static final String TAG = "ThumbnailDownloader";
-    public static final int MESSAGE_DOWNLOAD = 0;
+    private static final String TAG = "ThumbnailDownloader";
+    private static final int MESSAGE_DOWNLOAD = 0;
 
     private boolean mHasQuit = false;
     private Handler mRequestHandler;
-    private ConcurrentHashMap<T, String> mRequestMap = new ConcurrentHashMap<> ();
+    private LruCache<String, Bitmap> mCache;
+    private ConcurrentHashMap<T, String> mRequestMap = new ConcurrentHashMap<>();
     private Handler mResponderHandler;
     private ThumbnailDownloadListener<T> mThumbnailDownloadListener;
 
-    public interface ThumbnailDownloadListener<T> {
-        void onThumbnailDownloaded(T target, Bitmap thumbnail);
-    }
-
-    public void setThumbnailLIistener(ThumbnailDownloadListener<T> listener) {
-        mThumbnailDownloadListener = listener;
-    }
-
-    public ThumbnailDownloader(Handler responseHandler) {
-        super (TAG);
+    ThumbnailDownloader(Handler responseHandler, LruCache<String, Bitmap> stringBitmapLruCache) {
+        super(TAG);
         mResponderHandler = responseHandler;
+        mCache = stringBitmapLruCache;
     }
 
     @SuppressLint("HandlerLeak")
     @Override
     protected void onLooperPrepared() {
-        mRequestHandler = new Handler () {
+        mRequestHandler = new Handler() {
             @Override
             public void handleMessage(Message msg) {
                 if (msg.what == MESSAGE_DOWNLOAD) {
                     T target = (T) msg.obj;
-                    Log.i (TAG, "got request for URL: " + mRequestMap.get (target));
-                    handleRequest (target);
+                    //Log.i(TAG, "got request for URL: " + mRequestMap.get(target));
+                    handleRequest(target);
                 }
             }
         };
     }
 
     private void handleRequest(final T target) {
-        final String url = mRequestMap.get (target);
+        final String url = mRequestMap.get(target);
 
         if (url == null) {
             return;
         }
 
-        byte[] bitmapBytes = new FlickrFetcher ().getUrlBytes (url);
-        final Bitmap bitmap = BitmapFactory.decodeByteArray (bitmapBytes, 0, bitmapBytes.length);
-        Log.i (TAG, "bitmap decoded");
+        final Bitmap bitmap;
+        if (mCache.get(url) == null) {
+            byte[] bitmapBytes = new FlickrFetcher().getUrlBytes(url);
+            bitmap = BitmapFactory.decodeByteArray(bitmapBytes, 0, bitmapBytes.length);
+            mCache.trimToSize(mCache.maxSize());
+            mCache.put(url, bitmap);
+            Log.i(TAG, "bitmap decoded and loaded to cache");
+        }else{
+            bitmap = mCache.get(url);
+            Log.i(TAG,"bitmap loaded from cache");
+        }
 
-        mResponderHandler.post (new Runnable () {
-            @Override
-            public void run() {
-                if (mRequestMap.get (target) != url || mHasQuit) {
-                    return;
-                }
-                mRequestMap.remove (target);
-                mThumbnailDownloadListener.onThumbnailDownloaded (target, bitmap);
+        mResponderHandler.post(() -> {
+
+            if (mRequestMap.get(target) == null
+                    || !Objects.requireNonNull(mRequestMap.get(target)).equals(url) || mHasQuit) {
+                return;
             }
+            mRequestMap.remove(target);
+            mThumbnailDownloadListener.onThumbnailDownloaded(target, bitmap);
         });
     }
 
-    public void clearQueue() {
-        mRequestHandler.removeMessages (MESSAGE_DOWNLOAD);
-        mRequestMap.clear ();
+    void clearQueue() {
+        mRequestHandler.removeMessages(MESSAGE_DOWNLOAD);
+        mRequestMap.clear();
     }
 
     @Override
     public boolean quit() {
         mHasQuit = true;
-        return super.quit ();
+        return super.quit();
     }
 
-    public void queueThumbnail(T target, String url) {
-        Log.i (TAG, "Got url: " + url);
+    void queueThumbnail(T target, String url) {
+        //Log.i(TAG, "Got url: " + url);
 
         if (url == null) {
-            mRequestMap.remove (target);
+            mRequestMap.remove(target);
         } else {
-            mRequestMap.put (target, url);
-            mRequestHandler.obtainMessage (MESSAGE_DOWNLOAD, target).sendToTarget ();
+            mRequestMap.put(target, url);
+            mRequestHandler.obtainMessage(MESSAGE_DOWNLOAD, target).sendToTarget();
         }
+    }
+
+    public interface ThumbnailDownloadListener<T> {
+        void onThumbnailDownloaded(T target, Bitmap thumbnail);
+    }
+
+    void setThumbnailLIistener(ThumbnailDownloadListener<T> listener) {
+        mThumbnailDownloadListener = listener;
     }
 }
